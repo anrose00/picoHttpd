@@ -15,10 +15,6 @@ typedef struct
     int error_code;
 } user_credentials;
 
-char *auth_realm;
-char *auth_host;
-
-
 user_credentials* credentials(const char * token);
 char *realm();
 

@@ -4,34 +4,42 @@
 #include <string.h>
 #include <stdio.h>
 
+#if (defined __linux__) || defined(__CYGWIN__)
+   #define SOCKET int
+#else
+   #include <Winsock2.h>
+#endif
+
 //Server control functions
 #define DEFAULT_PORT_NO "12913"
-#define MAXBUFFER 131070
+#define MAXBUFFER 0x1FFFE
+#define MAX_REQUEST_HEADERS 49
+#define CONNMAX 1000
+#define BUFSIZE 1024
+
+typedef struct {
+   char    *method,    // "GET" or "POST"
+           *uri,       // "/index.html" things before '?'
+           *querystring,        // "a=1&b=2"     things after  '?'
+           *prot;      // "HTTP/1.1"
+
+   char    *payload;     // for POST
+   int      payload_size;
+   int      auth_attempts;
+   int      keepalive;
+} HTTP_REQUEST;
 
 void serve_forever(const char *PORT);
-
-// Client request
-
-char    *method,    // "GET" or "POST"
-        *uri,       // "/index.html" things before '?'
-        *querystring,        // "a=1&b=2"     things after  '?'
-        *prot;      // "HTTP/1.1"
-
-char    *payload;     // for POST
-int      payload_size;
-int      auth_attempts;
-int      keepalive;
-
 char* request_header(const char* name);
 char* pico_hostname();
 int get_bytes();
 void reset_request();
 void reset_headers();
+void respond(int n, HTTP_REQUEST *req);
 
 // user shall implement this function
 
-void route();
-
+void httpdRoute(HTTP_REQUEST *req, SOCKET sock);
 
 // some usefule macros for `route()`
 #define ROUTE_START()       if (0) {
@@ -43,4 +51,24 @@ void route();
                                 "The requested resource cannot be found.\r\n" \
                             );
 
+#ifdef DEBUG 
+   #if (defined __linux__) || defined(__CYGWIN__)
+      #define dp(...) \
+        { \
+          fprintf(stderr, __VA_ARGS__); \
+        }
+   #else
+      #if (defined WIN32)
+         #define dp(...) \
+         { \
+            char buffer0815[1024]; \
+            sprintf(&buffer,__VA_ARGS__) \
+            OutputDebugString(buffer); \
+         }
+      #endif
+   #endif
+#else
+#define dp(...)
+#endif
+                            
 #endif

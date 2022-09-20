@@ -4,10 +4,40 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <strings.h>
-#include "picoutils.h"
 
-char * http_description(int response_code)
+
+char *assign_string(char *targetstr, const char *sourcestr)
+{
+  if (targetstr)
+  {
+      if (strlen(targetstr)>0) free(targetstr);
+  }
+  int sz = strlen(sourcestr);
+  targetstr = malloc(sizeof(char)*(1+sz));
+  targetstr[sz]='\0';
+  strncpy(targetstr, sourcestr, sz);
+  return targetstr;
+}
+
+int sock_printf(SOCKET sock, const char *format_string, ...)
+{
+   va_list args;
+   va_start(args, format_string);
+   int size,res;
+     
+   char *sBuf = malloc(MAXCHUNK);
+   if (!sBuf)
+      return -1;
+   size = vsprintf(sBuf,format_string,args);
+   res = send(sock,sBuf,size,0);
+   if (res == -1)
+      dp("Socket send error");
+   free(sBuf);
+   va_end(args);
+   return size;
+}
+
+char *http_description(int response_code)
 {
     http_response_code *h = HTTP_RESPONSE_CODES;
     while(h->code) {
@@ -16,6 +46,7 @@ char * http_description(int response_code)
     }
     return NULL;
 }
+
 /// locate the indicated header or return a pointer to the next available.
 header_r *find_response_header(const char* header)
 {
@@ -68,7 +99,7 @@ void add_response_header(const char *header, const char *format, const char *val
    header_r *h = find_response_header(header);
    if (!h)
    {    
-       fprintf(stderr, "Response headers full - %s could not be added",header);
+       dp("Response headers full - %s could not be added",header);
    } else
    {
       // if this header has been used before, release memory
@@ -86,118 +117,121 @@ void add_response_header(const char *header, const char *format, const char *val
 }
 
 /// Implementation of the send header macro
-void send_header(int code)
+void send_header(SOCKET sock, int code)
 {
   char *description = http_description(code);
-  printf("HTTP/1.1 %u %s\r\n",code, description);
-  fprintf(stderr,"HTTP/1.1 %u %s\r\n",code, description);
+  sock_printf(sock,"HTTP/1.1 %u %s\r\n",code, description);
+  dp("HTTP/1.1 %u %s\r\n",code, description);
   int i=0;
   header_r *h = reshdr;
   while( (h->value || h->name) && i<MAX_RESPONSE_HEADERS) {
       if (h->name && h->value)
       {
-        printf("%s: %s\r\n", h->name, h->value);
-        fprintf(stderr,"[R] %s: %s\r\n", h->name, h->value);
+        sock_printf(sock,"%s: %s\r\n", h->name, h->value);
+        dp("[R] %s: %s\r\n", h->name, h->value);
       }
       h++;
   }
-  printf("\r\n");
-  fprintf(stderr,"\r\n");
+  sock_printf(sock,"\r\n");
+  dp("\r\n");
 }
 
-/// The function that actually outputs the content
-/// determining if the data needs to be sent as a stream (chuncked)
-/// or if it can be sent with a content length
-void _internal_send_content(int response_code, const char *content, va_list content_args)
+/* The function that actually outputs the content determining if the 
+   data needs to be sent as a stream (chunked) or if it can be sent with a content length.
+   The va_list must consist of string ptrs and must be terminated with a NULL ptr.
+*/
+void _internal_send_content(SOCKET sock, int response_code, const char *content, va_list content_args)
 {
-   
     int contentlength = 0;
     if (content) contentlength = strlen(content);
     
     const char *arg_content = va_arg(content_args, const char *);
     if (!arg_content) 
-    {  // there is only a single arugment, so send content length and the data.
+    {  // there is only a single argument, so send content length and the data.
          if (contentlength>0)
          {
             char contentlengthstr[13];
             snprintf(contentlengthstr, 13, "%u\0", contentlength);
             add_response_header(HEADER_CONTENT_LENGTH, "%s", contentlengthstr);
-            send_header(response_code);
-            printf(content);
-            fprintf(stderr, content);
+            send_header(sock, response_code);
+            sock_printf(sock, content);
+            dp(content);
          }
          else
          {
-            send_header(response_code);
+            send_header(sock, response_code);
          }
     }
     else
     {
         // there are multiple arguments, so we will chunk the data.
         add_response_header(HEADER_TRANSFER_ENCODING,"%s",HEADER_TRANFSER_TYPE_CHUNKED); 
-        send_header(response_code);
+        send_header(sock, response_code);
         if (content)
         {
-            printf("%x\r\n%s\r\n",contentlength, content);
-            fprintf(stderr,"%x\r\n%s\r\n",contentlength, content); 
+            sock_printf(sock,"%x\r\n%s\r\n",contentlength, content);
+            dp("%x\r\n%s\r\n",contentlength, content); 
         } 
         while (arg_content)
         {
            contentlength=strlen(arg_content); 
             if (contentlength>0)
-            { printf("%x\r\n%s\r\n", contentlength, arg_content);
-              fprintf(stderr,"%x\r\n%s\r\n", contentlength, arg_content);
+            { sock_printf(sock,"%x\r\n%s\r\n", contentlength, arg_content);
+              dp("%x\r\n%s\r\n", contentlength, arg_content);
             }
             arg_content = va_arg(content_args, const char *);
         }
-        printf("0\r\n");
+        sock_printf(sock,"0\r\n");
     }
-    printf("\r\n");
-    fprintf(stderr,"\r\n");
+    sock_printf(sock,"\r\n");
+    dp("\r\n");
     reset_response_headers();
 }
 
 /// A successful request has been received and content will be returned
-void _ok(const char *content, ...) 
+void _ok(SOCKET sock, const char *content, ...) 
 {
-   SENDCONTENT(200);
+  va_list args;
+  va_start(args, content);
+  _internal_send_content(sock, 200, content, args);
+  va_end(args);  
 }
 
 /// The requested resource cannot be found
-void _notfound(const char *content, ...)
+void _notfound(SOCKET sock, const char *content)
 {
-   SENDCONTENT(404); 
+   SEND_CONTENT(sock, 404, content); 
 }
 /// When the client sends no authentication header or the header
 /// has been rejected, fewer times than the max limit)
-void _notauthorized(const char *realm, const char *content, ...)
+void _notauthorized(SOCKET sock, const char *realm, const char *content)
 {
     // ensure there is a safe realm to apply
-   char myRealm[1024]="PICOServer"; 
+   char myRealm[BUFSIZE]="PICOServer"; 
    int rl = 10;
    if (realm)
    {  
       rl=strlen(realm);
-      strncpy(myRealm,realm,1023);
+      strncpy(myRealm,realm,BUFSIZE-1);
    }
    myRealm[rl]=0; 
    add_response_header(HEADER_CONNECTION, "%s", HEADER_VALUE_CONNECTION_KEEP_ALIVE);
    add_response_header(HEADER_WWW_AUTHENTICATE,"Basic realm=\"%s\"",myRealm);
-   SENDCONTENT(401);
+   SEND_CONTENT(sock, 401 , content);
 }
 
 /// When authentication fails and the server refuses to accept any more attemps 
 /// from the client.
-void _forbidden(const char *content, ...)
+void _forbidden(SOCKET sock, const char *content)
 {
     add_response_header(HEADER_CONNECTION,"%s", HEADER_VALUE_CONNECTION_CLOSE);
-    SENDCONTENT(403);
+    SEND_CONTENT(sock, 403, content);
 }
 
-void _send_content(int response_code, const char *content, ...)
+void _send_content(SOCKET sock, int response_code, const char *content, ...)
 {
   va_list args;
   va_start(args, content);
-  _internal_send_content(response_code, content, args);
+  _internal_send_content(sock, response_code, content, args);
   va_end(args);
 }

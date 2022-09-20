@@ -1,6 +1,5 @@
-#define _TESTING_
-
 #include "../include/httpresponse.h"
+#include "../include/httpd.h"
 #include <stdlib.h>
 #include <stdio.h>
 

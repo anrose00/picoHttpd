@@ -35,7 +35,7 @@ void test_response_headers(char *set_name)
     new_set(set_name);
     new_test("unknown Headers");
     header_r *h = find_response_header("not a real header");
-    check_str("\0",h->name);
+    check_str(NULL,h->name);
    
     new_test("Add a header");
     add_response_header("Content-Encoding","%s","text/xml");

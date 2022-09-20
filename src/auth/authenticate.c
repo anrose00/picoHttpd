@@ -1,12 +1,16 @@
 #include "base64.h"
 #include "authenticate.h"
-#include "picoutils.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
 #define BASIC_TEXT "Basic"
 char _auth_realm[1024] = "\0";
+
+char *auth_realm;
+char *auth_host;
+
+extern char *assign_string(char *targetstr, const char *sourcestr);
 
 int basic(const char *token, user_credentials *user)
 {
@@ -19,7 +23,7 @@ int basic(const char *token, user_credentials *user)
        user->bearer=assign_string(user->bearer, token);
 
        // locate the b64
-       while (*c != ' ' && c!='\0') c++;
+       while (*c != ' ' &&  *c!='\0') c++;
        if (c) {
         c++; // skip over the space
         // decode the base64

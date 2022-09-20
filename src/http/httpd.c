@@ -1,31 +1,42 @@
 #include "httpd.h"
 #include "httpconst.h"
+#include "httpresponse.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
-#include <netdb.h>
 #include <fcntl.h>
 #include <signal.h>
+#if (defined __linux__) || defined(__CYGWIN__)
+   #include <unistd.h>
+   #include <sys/socket.h>
+   #include <netdb.h>
+   #define EXIT(x) exit(x)
+   #define closesocket(x) close(x)
+   #define SOCKET int
+#else
+   #include <windows.h>   
+   #include <ws2def.h>
+   #include <WS2tcpip.h>
+   #define SHUT_RDWR SD_BOTH
+   #define EXIT(x) ExitThread(x)
+#endif
 
-#define CONNMAX 1000
+// Client request
 
-static int listenfd, clients[CONNMAX];
+static SOCKET listenfd, clients[CONNMAX];
 static void error(char *);
 static void startServer(const char *);
-static void respond(int);
 
 typedef struct { char *name, *value; } header_t;
-#define MAX_REQUEST_HEADERS 49
+
 static header_t reqhdr[MAX_REQUEST_HEADERS+1] = { {"\0", "\0"} };
 static int clientfd;
 
 static char *buf;
-static char _pico_hostname[1024] = "\0";
+static char _pico_hostname[BUFSIZE] = "\0";
 static char *bufptr;
 static int clientslot;
 static int eob;
@@ -34,9 +45,8 @@ void serve_forever(const char *PORT)
 {
     struct sockaddr_in clientaddr;
     socklen_t addrlen;
-    char c;    
-    
     int slot=0;
+    int i;
     
     printf(
             "Server started %shttp://127.0.0.1:%s%s\n",
@@ -44,13 +54,14 @@ void serve_forever(const char *PORT)
             );
 
     // Setting all elements to -1: signifies there is no client connected
-    int i;
     for (i=0; i<CONNMAX; i++)
         clients[i]=-1;
     startServer(PORT);
     
+#ifndef WIN32
     // Ignore SIGCHLD to avoid zombie threads
     signal(SIGCHLD,SIG_IGN);
+#endif
 
     // ACCEPT connections
     while (1)
@@ -64,21 +75,29 @@ void serve_forever(const char *PORT)
         }
         else
         {
+#ifndef WIN32 
             if ( fork()==0 )
+#endif
             {
                 // I am now the client - close the listener: client doesnt need it
-                keepalive=1;
-                auth_attempts=0;
+                HTTP_REQUEST *req;
+                req = malloc(sizeof(HTTP_REQUEST));
+                memset(req,0,sizeof(HTTP_REQUEST));
                 clientslot=slot;
-                close(listenfd); 
                 init_response_headers();
-                respond(slot);
-                exit(0);
-            } else 
+                req->keepalive=1;
+                respond(slot,req);
+                free(req);
+                closesocket(listenfd); 
+                EXIT(0);
+            } 
+#ifndef WIN32
+            else 
             {
                 // I am still the server - close the accepted handle: server doesnt need it.
                 close(clients[slot]);
             }
+#endif
         }
 
         while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
@@ -101,8 +120,7 @@ void startServer(const char *port)
     int gai_result;
     if (gai_result=getaddrinfo(_pico_hostname,"http",&hints, &res)!=0)
     {
-       fprintf(stderr, 
-        "Note: cant find the FQDN (%s). Using local hostname instead.\r\n",gai_strerror(gai_result));
+       dp("Note: cant find the FQDN (%s). Using local hostname instead.\r\n",gai_strerror(gai_result));
        // could not get it.  just use hostname
        strcpy(_pico_hostname, getenv("HOSTNAME"));
     }
@@ -110,7 +128,8 @@ void startServer(const char *port)
     {
        for(p=res; p!=NULL; p=p->ai_next) 
        {
-         fprintf(stderr,"hostname: %s\r\n",p->ai_canonname);
+          if (p->ai_canonname)
+            dp("hostname: %s\r\n",p->ai_canonname);
        }      
        freeaddrinfo(res);
     }
@@ -120,21 +139,21 @@ void startServer(const char *port)
     if (getaddrinfo( NULL, port, &hints, &res) != 0)
     {
         perror ("getaddrinfo() error");
-        exit(1);
+        EXIT(1);
     }
     // socket and bind
     for (p = res; p!=NULL; p=p->ai_next)
     {
         int option = 1;
         listenfd = socket (p->ai_family, p->ai_socktype, 0);
-        setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+        setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, (char *) &option, sizeof(option));
         if (listenfd == -1) continue;
         if (bind(listenfd, p->ai_addr, p->ai_addrlen) == 0) break;
     }
     if (p==NULL)
     {
         perror ("socket() or bind()");
-        exit(1);
+        EXIT(1);
     }
 
     freeaddrinfo(res);
@@ -143,10 +162,9 @@ void startServer(const char *port)
     if ( listen (listenfd, 1000000) != 0 )
     {
         perror("listen() error");
-        exit(1);
+        EXIT(1);
     }
 }
-
 
 // get request header
 char* request_header(const char* name)
@@ -170,22 +188,21 @@ void reset_headers()
 
 void reset_request()
 {
-    fprintf(stderr,"\r\nPrepare for new request on slot:%u\r\n",clientslot);
+    dp("\r\nPrepare for new request on slot:%u\r\n",clientslot);
     eob=0;
-    payload=NULL;
     bufptr=buf;
     reset_headers();
 }
 
-int get_bytes()
+int get_bytes(HTTP_REQUEST *req)
 {
     // move the buffer point to the end of the last buffer
     bufptr=bufptr+eob; 
     
     // calculate the remaining buffer size
     int buffsize = buf+MAXBUFFER-bufptr;
-    if (buffsize>65534) buffsize=65534;
-    fprintf(stderr, "Slot: %u, buffsize: %u bytes\r\n",clientslot, buffsize);
+    if (buffsize>(MAXBUFFER/2)) buffsize=(MAXBUFFER/2);
+    dp("Slot: %u, buffsize: %u bytes\r\n",clientslot, buffsize);
 
     // read the bytes from the socket.
     int rcvd = recv(clients[clientslot], bufptr, buffsize, 0);
@@ -193,18 +210,18 @@ int get_bytes()
     // handle outcome of recv call.
     if (rcvd < 0) 
     { // receive error
-        fprintf(stderr, "recv() error or session end\r\n");
-        keepalive=0;
+        dp("recv() error or session end\r\n");
+        req->keepalive=0;
     }
     else if (rcvd == 0)
     {
         // receive socket closed
-        fprintf(stderr, "Client disconnected gracefully.\r\n");
-        keepalive=0;
+        dp("Client disconnected gracefully.\r\n");
+        req->keepalive=0;
     }
     else // message received
     {
-        fprintf(stderr, "Received %u bytes buf=%u, bufptr=%u\r\n",rcvd, buf, bufptr);
+        dp("Received %u bytes buf=%u, bufptr=%u\r\n",rcvd, buf, bufptr);
         // terminate the incoming buffer;
         bufptr[rcvd] = '\0';
     }
@@ -216,11 +233,9 @@ int get_bytes()
 }
 
 //client connection
-void respond(int n)
+void respond(int n, HTTP_REQUEST *req)
 {
-    int rcvd, fd, bytes_read;
-    char *ptr;
-
+    int rcvd;
     buf = malloc(MAXBUFFER);
 
     // header pointers.
@@ -230,10 +245,9 @@ void respond(int n)
     char *eohptr=NULL;
     reset_request();
 
-    while (keepalive)
+    while (req->keepalive)
     {
-                
-        rcvd=get_bytes();
+        rcvd=get_bytes(req);
         
         if (rcvd>0)
         {
@@ -241,7 +255,7 @@ void respond(int n)
             if (!eohptr)
             {
                 eohptr=strstr(buf, "\r\n\r\n");
-                // if no dobule crlf is found, go back for more bytes.
+                // if no double crlf is found, go back for more bytes.
                 if (!eohptr) 
                 {
                     // TODO: if the buffer is full and still no header, then return a 413 Entity too large.
@@ -257,28 +271,28 @@ void respond(int n)
             // extract the protocol, URL and 
             if (!protcol_rcvd)
             {
-                method = strtok(bufptr, " \t\r\n");
-                uri = strtok(NULL, " \t");
-                prot = strtok(NULL, " \t\r\n");
+                req->method = strtok(bufptr, " \t\r\n");
+                req->uri = strtok(NULL, " \t");
+                req->prot = strtok(NULL, " \t\r\n");
 
-                if (method==NULL || uri == NULL || prot==NULL)
+                if (req->method==NULL || req->uri == NULL || req->prot==NULL)
                 {
                     // send bad request 400 
-                    keepalive=0;
+                    req->keepalive=0;
                     break;
                 } 
 
                 protcol_rcvd=1;
-                fprintf(stderr, "\x1b[32m + [%s] %s\x1b[0m\n", method, uri);
+                dp("\x1b[32m + [%s] %s\x1b[0m\n", req->method, req->uri);
 
 
-                if (querystring = strchr(uri, '?'))
+                if (req->querystring = strchr(req->uri, '?'))
                 {
-                    *querystring++ = '\0'; //split URI
+                    *req->querystring++ = '\0'; //split URI
                 }
                 else
                 {
-                    querystring = uri - 1; //use an empty string
+                    req->querystring = req->uri - 1; //use an empty string
                 }
             }
 
@@ -298,7 +312,7 @@ void respond(int n)
                     h->name = header_name;
                     h->value = header_value;
                     h++;
-                    fprintf(stderr, "[H] %s: %s\n", header_name, header_value);
+                    dp("[H] %s: %s\n", header_name, header_value);
                     t = header_value + 1 + strlen(header_value);
                     if (t[1] == '\r' && t[2] == '\n')
                     {
@@ -310,36 +324,30 @@ void respond(int n)
                 {
                     t++;                                        // now the *t shall be the beginning of user payload
                     t2 = request_header(HEADER_CONTENT_LENGTH); // and the related header if there is
-                    payload = t;
-                    payload_size = t2 ? atol(t2) : (eob - (t - buf));
+                    req->payload = t;
+                    req->payload_size = t2 ? atol(t2) : (eob - (t - buf));
                     if (t2)
                     {
-                        fprintf(stderr, "Expecting %s bytes\r\n", t2);
-                        fprintf(stderr, "%u Bytes Received\r\n", payload_size);
+                        dp("Expecting %s bytes\r\n", t2);
+                        dp("%u Bytes Received\r\n", req->payload_size);
                     }
                 }
             }
-            if (payload)
+            if (req->payload)
             { 
-                // bind clientfd to stdout, making it easier to write
-                clientfd = clients[n];
-                dup2(clientfd, STDOUT_FILENO);
-                close(clientfd);
-
-                // call router
-                route();
-                reset_request();
+               // bind clientfd to stdout, making it easier to write
+               clientfd = clients[n];
+               
+               // call router
+               httpdRoute(req,clientfd);
+               reset_request();
             }
         }
-        fflush(stdout);
     }
-    // tidy up stdout.
-    shutdown(STDOUT_FILENO, SHUT_WR);
-    close(STDOUT_FILENO);
+    free(buf);
 
     //Closing SOCKET
     shutdown(clientfd, SHUT_RDWR);         //All further send and recieve operations are DISABLED...
-    close(clientfd);
     clients[n]=-1;
 }
 
