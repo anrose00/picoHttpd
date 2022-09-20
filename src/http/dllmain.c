@@ -9,9 +9,13 @@
    
    Start the server using this exported function:
    
-   HANDLE WINAPI StartHttpdThread(LPSTR portNumberS, LPSTR buffer) and provide the port
-   number and a buffer which will receive the query string. The server runs in a new
-   thread. Your main thread should wait and check for the response using OAuthDataAvail.
+   HANDLE WINAPI StartHttpdThread(LPSTR portNumberS, LPSTR buffer) 
+   
+   and provide the port number and a buffer which will receive the query string. 
+   The server runs in a new thread. Your main thread should wait and check for the 
+   response using the API call 
+   
+   BOOL WINAPI OAuthDataAvail()
    
    If OAuthDataAvail answers true, the query string has been written to the provided 
    buffer.

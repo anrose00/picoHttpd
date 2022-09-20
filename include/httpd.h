@@ -7,7 +7,9 @@
 #if (defined __linux__) || defined(__CYGWIN__)
    #define SOCKET int
 #else
-   #include <Winsock2.h>
+   #if (defined WIN32)
+      #include <Winsock2.h>
+   #endif
 #endif
 
 //Server control functions
