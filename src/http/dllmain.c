@@ -85,7 +85,7 @@ BOOL WINAPI OAuthDataAvail()
    return (bufferOAuthData && strlen(bufferOAuthData));
 }
 
-void httpdRoute(HTTP_REQUEST *req,SOCKET sock)
+void httpdRoute(HTTP_REQUEST *req)
 {
   
    if (strcmp("/",req->uri)==0 && strcmp("GET",req->method)==0 && strlen(req->querystring))
@@ -95,7 +95,7 @@ void httpdRoute(HTTP_REQUEST *req,SOCKET sock)
       {
          strcpy(bufferOAuthData,req->querystring);
       }
-      OK(sock,MSG_SUCCESS);
+      OK(req->conn,MSG_SUCCESS);
    } else
    if (strcmp("/",req->uri)==0&&strcmp("GET",req->method)==0)
    {
@@ -105,7 +105,7 @@ void httpdRoute(HTTP_REQUEST *req,SOCKET sock)
    {
         dp( "In Post handling %u\r\n",req->payload_size);
    } else
-      NOTFOUND(sock,MSG_NOTFOUND);
+      NOTFOUND(req->conn,MSG_NOTFOUND);
    
    req->keepalive = 0;
 }

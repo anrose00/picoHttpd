@@ -4,7 +4,8 @@
 cmake_minimum_required(VERSION 3.10)
 
 # set the project name
-project(picoHttpd)
+project(picoHttpd_)
+set(OAUTHDLL picoHttpd)
 
 #setup build options
 #define the list of source modules C
@@ -43,13 +44,14 @@ endif()
 
 #define the target
 if(WIN32 AND NOT CYGWIN)
-   # add_library(${PROJECT_NAME} SHARED ${SOURCES_C} ${SOURCES_OAUTH_WIN} ${SOURCES_RC} ${SOURCES_DEF})
+   add_library(${OAUTHDLL} SHARED ${SOURCES_C} ${SOURCES_OAUTH_WIN} ${SOURCES_RC} ${SOURCES_DEF})
    add_executable(${PROJECT_NAME} ${SOURCES_C} ${SOURCES_EXAMPLE})
 else()
    add_executable(${PROJECT_NAME} ${SOURCES_C} ${SOURCES_EXAMPLE})
 endif()
    
 target_include_directories(${PROJECT_NAME} PRIVATE "./include")
+target_include_directories(${OAUTHDLL} PRIVATE "./include")
 
 # set compiler options for MS Visual C
 if (MSVC)
@@ -57,26 +59,47 @@ if (MSVC)
    target_compile_options(${PROJECT_NAME} PRIVATE /Zp1)   # struct member align 1
    target_compile_options(${PROJECT_NAME} PRIVATE /TC)   # compile as C
    target_compile_options(${PROJECT_NAME} PRIVATE /Gd)   # C calling convention
+
+   target_compile_options(${OAUTHDLL} PRIVATE /arch:IA32)  # plain IA32 instr. set
+   target_compile_options(${OAUTHDLL} PRIVATE /Zp1)   # struct member align 1
+   target_compile_options(${OAUTHDLL} PRIVATE /TC)   # compile as C
+   target_compile_options(${OAUTHDLL} PRIVATE /Gd)   # C calling convention
+
    target_compile_definitions(${PROJECT_NAME} PRIVATE _LIB WIN32_LEAN_AND_MEAN)
    target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
    target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_DEPRECATE)
    target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_NONSTDC__NO_DEPRECATE)
-   #target_link_options(${PROJECT_NAME} PRIVATE "/SUBSYSTEM:WINDOWS")
+
+   target_compile_definitions(${OAUTHDLL} PRIVATE _LIB WIN32_LEAN_AND_MEAN)
+   target_compile_definitions(${OAUTHDLL} PRIVATE _CRT_SECURE_NO_WARNINGS)
+   target_compile_definitions(${OAUTHDLL} PRIVATE _CRT_SECURE_NO_DEPRECATE)
+   target_compile_definitions(${OAUTHDLL} PRIVATE _CRT_NONSTDC__NO_DEPRECATE)
+
    target_link_options(${PROJECT_NAME} PRIVATE "/SUBSYSTEM:CONSOLE")
-   #target_link_options(${PROJECT_NAME} PRIVATE "/SAFESEH:NO")  # SafeSEH is not compatible with ASM
-   #target_link_options(${PROJECT_NAME} PRIVATE "/NODEFAULTLIB")
+   target_link_options(${OAUTHDLL} PRIVATE "/SUBSYSTEM:WINDOWS")
    
       # set other defines for compilation
       if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
          target_compile_definitions(${PROJECT_NAME} PRIVATE DEBUG)
          target_compile_options(${PROJECT_NAME} PRIVATE /MTd)   # Multi threaded debug
          target_link_libraries(${PROJECT_NAME} PRIVATE oldnames kernel32 ws2_32) 
+
+         target_compile_definitions(${OAUTHDLL} PRIVATE DEBUG)
+         target_compile_options(${OAUTHDLL} PRIVATE /MTd)   # Multi threaded debug
+         target_link_libraries(${OAUTHDLL} PRIVATE oldnames kernel32 ws2_32) 
       else()
          target_compile_options(${PROJECT_NAME} PRIVATE /MT)    # Multi threaded / static CRT
          target_compile_options(${PROJECT_NAME} PRIVATE /GS-)   # disable buffer security checks
          target_link_options(${PROJECT_NAME} PRIVATE "/INCREMENTAL:NO")
          target_link_options(${PROJECT_NAME} PRIVATE "/DYNAMICBASE:NO")
          target_link_libraries(${PROJECT_NAME} PRIVATE oldnames kernel32 ws2_32)
+
+         target_compile_options(${OAUTHDLL} PRIVATE /MT)    # Multi threaded / static CRT
+         target_compile_options(${OAUTHDLL} PRIVATE /GS-)   # disable buffer security checks
+         target_link_options(${OAUTHDLL} PRIVATE "/INCREMENTAL:NO")
+         target_link_options(${OAUTHDLL} PRIVATE "/DYNAMICBASE:NO")
+         target_link_libraries(${OAUTHDLL} PRIVATE oldnames kernel32 ws2_32)
+
       endif()
    # other C compilers (*nix platforms)
    else()
@@ -94,3 +117,4 @@ endif ()
 
 # use C name mangling regarding linkage
 set_target_properties(${PROJECT_NAME} PROPERTIES LANGUAGE C LINKER_LANGUAGE C)
+set_target_properties(${OAUTHDLL} PROPERTIES LANGUAGE C LINKER_LANGUAGE C)

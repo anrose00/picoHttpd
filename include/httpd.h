@@ -65,7 +65,7 @@ void httpdRoute(HTTP_REQUEST *req);
          #define dp(...) \
          { \
             char buffer0815[1024]; \
-            sprintf(&buffer0815,__VA_ARGS__); \
+            sprintf(&(buffer0815[0]),__VA_ARGS__); \
             OutputDebugString(buffer0815); \
          }
       #endif

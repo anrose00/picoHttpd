@@ -223,7 +223,7 @@ int get_bytes(HTTP_REQUEST *req)
    }
    else // message received
    {
-      dp("Received %u bytes buf=%u, bufptr=%u\r\n",rcvd, buf, bufptr);
+      dp("Received %u bytes buf=%p, bufptr=%p\r\n",rcvd, buf, bufptr);
       // terminate the incoming buffer;
       bufptr[rcvd] = '\0';
    }

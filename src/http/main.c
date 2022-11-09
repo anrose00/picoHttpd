@@ -95,7 +95,7 @@ void httpdRoute(HTTP_REQUEST *req)
          strcpy(str_path,str_documentRoot);
          strcat(str_path,req->uri);
          enforcePlatformPathSeparator(str_path);
-         send_file(req->conn,200,str_path,false);
+         send_file(req->conn,200,str_path,0);
          req->keepalive = 0;
       } 
       else
@@ -105,7 +105,7 @@ void httpdRoute(HTTP_REQUEST *req)
          strcpy(str_path,str_documentRoot);
          strcat(str_path,req->uri);
          enforcePlatformPathSeparator(str_path);
-         send_file(req->conn,200,str_path,true);
+         send_file(req->conn,200,str_path,1);
          req->keepalive = 0;
       }
       else

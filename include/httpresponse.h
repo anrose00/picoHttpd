@@ -48,9 +48,9 @@ void release_response_header(header_r *responseheader);
 char* all_response_headers();
 header_r *find_response_header(const char* header);
 int sock_printf(SOCKET sock, const char *format_string, ...);
-send_file(SOCKET sock, int response_code, const char *file_name, int hdr_only);
+void send_file(SOCKET sock, int response_code, const char *file_name, int hdr_only);
 
-#ifdef DEBUG 
+#if (defined DEBUG) && (!defined dp) 
    #if (defined __linux__) || defined(__CYGWIN__)
       #define dp(...) \
         { \
@@ -61,13 +61,11 @@ send_file(SOCKET sock, int response_code, const char *file_name, int hdr_only);
          #define dp(...) \
          { \
             char buffer0815[1024]; \
-            sprintf(&buffer0815,__VA_ARGS__); \
+            sprintf(&(buffer0815[0]),__VA_ARGS__); \
             OutputDebugString(buffer0815); \
          }
       #endif
-   #endif
-#else
-#define dp(...)   
+      #endif
 #endif
 
 #endif /* HTTPD_RESPONSE__ */
