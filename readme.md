@@ -4,6 +4,8 @@ This is a very simple HTTP server for Unix/Windows, written entirely in C.
 
 This is a clone of the PICO project. It's very easy to use - simply add your routes into httpdRoute().
 
+For more information about the HTTP protocol see: https://www.jmarshall.com/easy/http/
+
 ## How to use
 
 1. include header `httpd.h`

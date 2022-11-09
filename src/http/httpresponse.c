@@ -1,5 +1,6 @@
 #include "httpresponse.h"
 #include "httpconst.h"
+#include "mimetypes.h"
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -114,7 +115,7 @@ void add_response_header(const char *header, const char *format, const char *val
       // length of the value is a bit ambigous here, so assign to a temporary before copying it in.
       char lvalue[BUFSIZE*2];
       snprintf(lvalue, BUFSIZE*2-1, format, value);
-      h->value =assign_string(h->value, lvalue);
+      h->value = assign_string(h->value, lvalue);
       h->state = HAS_VALUE;
    }
 }
@@ -124,7 +125,7 @@ void send_header(SOCKET sock, int code)
 {
    char *description = http_description(code);
    sock_printf(sock,"HTTP/1.1 %u %s\r\n",code, description);
-   dp("HTTP/1.1 %u %s\r\n",code, description);
+   dp("[R] HTTP/1.1 %u %s\r\n",code, description);
    int i=0;
    header_r *h = reshdr;
    while( (h->value || h->name) && i<MAX_RESPONSE_HEADERS)
@@ -170,7 +171,7 @@ void _internal_send_content(SOCKET sock, int response_code, const char *content,
    else
    {
       // there are multiple arguments, so we will chunk the data.
-      add_response_header(HEADER_TRANSFER_ENCODING,"%s",HEADER_TRANFSER_TYPE_CHUNKED); 
+      add_response_header(HEADER_TRANSFER_ENCODING,"%s",HEADER_TRANSFER_TYPE_CHUNKED); 
       send_header(sock, response_code);
       if (content)
       {
@@ -194,6 +195,56 @@ void _internal_send_content(SOCKET sock, int response_code, const char *content,
    reset_response_headers();
 }
 
+void send_file(SOCKET sock, int response_code, const char *file_name, int hdr_only)
+{
+   int  fsize,index;
+   FILE *file;
+   char cont_len[13];
+   char str_line[BUFSIZE];
+   char c;
+   char *ext;
+   
+   file = fopen(file_name,"rb");
+   if (file)
+   {
+      ext = strrchr(file_name,'.');
+      if (ext)
+         ext++;
+      fseek(file, 0L, SEEK_END);
+      fsize = ftell(file);
+      sprintf(cont_len,"%d",fsize);
+      rewind(file);
+      add_response_header(HEADER_CONTENT_LENGTH, "%s", cont_len);
+      add_response_header(HEADER_CONTENT_TYPE, "%s", find_mimetype(ext));
+      add_response_header(HEADER_CONNECTION, "%s",HEADER_VALUE_CONNECTION_CLOSE);
+      send_header(sock, response_code);
+
+      /* send content if requested */
+      if (!hdr_only)
+      {
+         index = 0;
+         while (!feof(file))
+         {
+            str_line[index++] = c = fgetc(file);
+            if (index == (BUFSIZE-1))
+            {
+               send(sock,str_line,index,0);
+               index = 0;
+            }
+         }
+         if (index > 0)
+            send(sock,str_line,index,0);
+      }
+      fclose(file);
+      sock_printf(sock,"\r\n");
+      dp("\r\n");
+   }
+   else
+   {
+      NOTFOUND(sock,"The requested resource cannot be found.\r\n");
+   }
+   reset_response_headers();
+}
 /// A successful request has been received and content will be returned
 void _ok(SOCKET sock, const char *content, ...) 
 {

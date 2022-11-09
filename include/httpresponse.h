@@ -39,6 +39,7 @@ void _send_content(SOCKET sock, int response_code, const char *content,...);
 void _internal_send_content(SOCKET sock, int response_code, const char *content, va_list content_args);
 void init_response_headers();
 
+char *assign_string(char *targetstr, const char *sourcestr);
 char* http_description(int response_code);
 char* response_header(const char* header);
 void add_response_header(const char *header, const char *format, const char *value);
@@ -47,6 +48,7 @@ void release_response_header(header_r *responseheader);
 char* all_response_headers();
 header_r *find_response_header(const char* header);
 int sock_printf(SOCKET sock, const char *format_string, ...);
+send_file(SOCKET sock, int response_code, const char *file_name, int hdr_only);
 
 #ifdef DEBUG 
    #if (defined __linux__) || defined(__CYGWIN__)
@@ -59,8 +61,8 @@ int sock_printf(SOCKET sock, const char *format_string, ...);
          #define dp(...) \
          { \
             char buffer0815[1024]; \
-            sprintf(&buffer,__VA_ARGS__) \
-            OutputDebugString(buffer); \
+            sprintf(&buffer0815,__VA_ARGS__); \
+            OutputDebugString(buffer0815); \
          }
       #endif
    #endif

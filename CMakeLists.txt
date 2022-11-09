@@ -11,6 +11,7 @@ project(picoHttpd)
 set(SOURCES_C 
    src/http/httpd.c
    src/http/httpresponse.c
+   src/utils/mimetypes.c
 )
 
 set(SOURCES_OAUTH_WIN
@@ -42,7 +43,8 @@ endif()
 
 #define the target
 if(WIN32 AND NOT CYGWIN)
-   add_library(${PROJECT_NAME} SHARED ${SOURCES_C} ${SOURCES_OAUTH_WIN} ${SOURCES_RC} ${SOURCES_DEF})
+   # add_library(${PROJECT_NAME} SHARED ${SOURCES_C} ${SOURCES_OAUTH_WIN} ${SOURCES_RC} ${SOURCES_DEF})
+   add_executable(${PROJECT_NAME} ${SOURCES_C} ${SOURCES_EXAMPLE})
 else()
    add_executable(${PROJECT_NAME} ${SOURCES_C} ${SOURCES_EXAMPLE})
 endif()
@@ -59,8 +61,9 @@ if (MSVC)
    target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
    target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_DEPRECATE)
    target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_NONSTDC__NO_DEPRECATE)
-   target_link_options(${PROJECT_NAME} PRIVATE "/SUBSYSTEM:WINDOWS")
-   target_link_options(${PROJECT_NAME} PRIVATE "/SAFESEH:NO")  # SafeSEH is not compatible with ASM
+   #target_link_options(${PROJECT_NAME} PRIVATE "/SUBSYSTEM:WINDOWS")
+   target_link_options(${PROJECT_NAME} PRIVATE "/SUBSYSTEM:CONSOLE")
+   #target_link_options(${PROJECT_NAME} PRIVATE "/SAFESEH:NO")  # SafeSEH is not compatible with ASM
    #target_link_options(${PROJECT_NAME} PRIVATE "/NODEFAULTLIB")
    
       # set other defines for compilation

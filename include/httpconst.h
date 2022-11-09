@@ -6,7 +6,7 @@
 #define HEADER_WWW_AUTHENTICATE "WWW-Authenticate"
 #define HEADER_AUTHORIZATION "Authorization"
 #define HEADER_TRANSFER_ENCODING "Transfer-Encoding"
-#define HEADER_TRANFSER_TYPE_CHUNKED "chunked"
+#define HEADER_TRANSFER_TYPE_CHUNKED "chunked"
 #define HEADER_KEEP_ALIVE "Keep-Alive"
 #define HEADER_CONNECTION "Connection"
 #define HEADER_VALUE_CONNECTION_KEEP_ALIVE "keep-alive"

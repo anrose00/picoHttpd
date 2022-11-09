@@ -20,6 +20,7 @@
 #define BUFSIZE 1024
 
 typedef struct {
+   int     conn;       // connection handle
    char    *method,    // "GET" or "POST"
            *uri,       // "/index.html" things before '?'
            *querystring,        // "a=1&b=2"     things after  '?'
@@ -37,11 +38,11 @@ char* pico_hostname();
 int get_bytes();
 void reset_request();
 void reset_headers();
-void respond(int n, HTTP_REQUEST *req);
+void respond(HTTP_REQUEST *req);
 
 // user shall implement this function
 
-void httpdRoute(HTTP_REQUEST *req, SOCKET sock);
+void httpdRoute(HTTP_REQUEST *req);
 
 // some usefule macros for `route()`
 #define ROUTE_START()       if (0) {
@@ -64,8 +65,8 @@ void httpdRoute(HTTP_REQUEST *req, SOCKET sock);
          #define dp(...) \
          { \
             char buffer0815[1024]; \
-            sprintf(&buffer,__VA_ARGS__) \
-            OutputDebugString(buffer); \
+            sprintf(&buffer0815,__VA_ARGS__); \
+            OutputDebugString(buffer0815); \
          }
       #endif
    #endif

@@ -22,7 +22,7 @@
       #include <ws2def.h>
       #include <WS2tcpip.h>
       #define SHUT_RDWR SD_BOTH
-      #define EXIT(x) ExitThread(x)
+      #define EXIT(x) // ExitThread(x)
    #endif
 #endif
 
@@ -86,10 +86,10 @@ void serve_forever(const char *PORT)
             HTTP_REQUEST *req;
             req = malloc(sizeof(HTTP_REQUEST));
             memset(req,0,sizeof(HTTP_REQUEST));
-            clientslot=slot;
+            req->conn = clients[slot]; 
             init_response_headers();
             req->keepalive=1;
-            respond(slot,req);
+            respond(req);
             free(req);
             closesocket(listenfd); 
             EXIT(0);
@@ -207,7 +207,7 @@ int get_bytes(HTTP_REQUEST *req)
    dp("Slot: %u, buffsize: %u bytes\r\n",clientslot, buffsize);
 
    // read the bytes from the socket.
-   int rcvd = recv(clients[clientslot], bufptr, buffsize, 0);
+   int rcvd = recv(req->conn, bufptr, buffsize, 0);
 
    // handle outcome of recv call.
    if (rcvd < 0) 
@@ -235,7 +235,7 @@ int get_bytes(HTTP_REQUEST *req)
 }
 
 //client connection
-void respond(int n, HTTP_REQUEST *req)
+void respond(HTTP_REQUEST *req)
 {
    int rcvd;
    buf = malloc(MAXBUFFER);
@@ -337,17 +337,18 @@ void respond(int n, HTTP_REQUEST *req)
          }
          if (req->payload)
          { 
-            clientfd = clients[n];
-            
             // call router
-            httpdRoute(req,clientfd);
+            httpdRoute(req);
             reset_request();
+         }
+         else
+         {
+            dp("Request without payload?\r\n");
          }
       }
    }
    free(buf);
    shutdown(clientfd, SHUT_RDWR);         //All further send and recieve operations are DISABLED...
-   clients[n]=-1;
 }
 
 char* pico_hostname()

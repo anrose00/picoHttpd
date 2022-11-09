@@ -2,6 +2,7 @@ includepath = include
 VPATH = test src/auth src/utils src/http include 
 export C_INCLUDE_PATH = ./include
 OBJDIR = obj/
+Cflags = DEBUG
 
 all: server
 
@@ -11,8 +12,8 @@ clean:
 
 server: objectdir _server
 
-_server:  main.c httpd.o httpresponse.o authenticate.o base64.o
-	gcc  -g -o bin/server $< $(wildcard obj/*.o)
+_server:  main.c httpd.o httpresponse.o authenticate.o base64.o mimetypes.o
+	gcc -g -o bin/server $< $(wildcard obj/*.o)
 
 tests: objectdir _tests
 
@@ -28,6 +29,6 @@ objectdir:
 	mkdir -p $(OBJDIR) && mkdir -p bin/
 
 ## Compile with debugging.
-%.o: %.c 
-	gcc -g -c $< -o $(OBJDIR)$@
+%.o: %.c
+	gcc -D$(Cflags) -g -c $< -o $(OBJDIR)$@
 
